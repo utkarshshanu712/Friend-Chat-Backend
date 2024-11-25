@@ -17,7 +17,6 @@ const io = new Server(server, {
   },
 });
 
-const CHAT_PASSWORD = process.env.CHAT_PASSWORD || "(Mz@@@000)";
 const PORT = process.env.PORT || 5000;
 
 const activeUsers = new Map();
@@ -52,21 +51,19 @@ setInterval(checkDatabaseSize, 3600000);
 
 // Add predefined users
 const defaultUsers = [
-  { username: 'admin', password: 'admin123' },
-  { username: 'user1', password: 'user123' },
-  { username: 'user2', password: 'user456' },
-  { username: 'user3', password: 'user789' }
+  { username: "admin", password: "admin123" },
+  { username: "user1", password: "user123" },
+  { username: "user2", password: "user456" },
+  { username: "user3", password: "user789" },
 ];
 
 // Initialize default users
 async function initializeUsers() {
   for (const user of defaultUsers) {
     try {
-      await User.findOneAndUpdate(
-        { username: user.username },
-        user,
-        { upsert: true }
-      );
+      await User.findOneAndUpdate({ username: user.username }, user, {
+        upsert: true,
+      });
     } catch (err) {
       console.error(`Error creating user ${user.username}:`, err);
     }
@@ -76,9 +73,20 @@ async function initializeUsers() {
 // Initialize users on server start
 initializeUsers();
 
+app.use(express.json());
+
+// Add this endpoint before socket.io setup
+app.get("/users", (req, res) => {
+  res.json(
+    defaultUsers.map((user) => ({
+      username: user.username,
+    }))
+  );
+});
+
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
-  
+
   socket.on("auth", async ({ username, password }) => {
     try {
       const user = await User.findOne({ username, password });
@@ -99,7 +107,7 @@ io.on("connection", (socket) => {
       } else {
         // Check against default users if MongoDB fails
         const defaultUser = defaultUsers.find(
-          u => u.username === username && u.password === password
+          (u) => u.username === username && u.password === password
         );
         if (defaultUser) {
           activeUsers.set(socket.id, username);
@@ -114,7 +122,7 @@ io.on("connection", (socket) => {
       console.error("Auth error:", err);
       // Fallback to default users
       const defaultUser = defaultUsers.find(
-        u => u.username === username && u.password === password
+        (u) => u.username === username && u.password === password
       );
       if (defaultUser) {
         activeUsers.set(socket.id, username);
