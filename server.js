@@ -14,7 +14,7 @@ const io = new Server(server, {
   }
 });
 
-const CHAT_PASSWORD = process.env.CHAT_PASSWORD || 'test123';
+const CHAT_PASSWORD = process.env.CHAT_PASSWORD || "(Mz@@@000)";
 const PORT = process.env.PORT || 5000;
 
 const activeUsers = new Map();
