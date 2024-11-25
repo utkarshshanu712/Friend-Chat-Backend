@@ -5,10 +5,7 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import { Message } from "./models/Message.js";
 import { User } from "./models/User.js";
-<<<<<<< HEAD
 import cors from 'cors';
-=======
->>>>>>> f9bf8392d381df78ab081eef6cca137800343ecc
 
 dotenv.config();
 
@@ -55,34 +52,21 @@ setInterval(checkDatabaseSize, 3600000);
 
 // Add predefined users
 const defaultUsers = [
-<<<<<<< HEAD
   { username: 'admin', password: 'admin123' },
   { username: 'user1', password: 'user123' },
   { username: 'user2', password: 'user456' },
   { username: 'user3', password: 'user789' }
-=======
-  { username: "admin", password: "admin123" },
-  { username: "user1", password: "user123" },
-  { username: "user2", password: "user456" },
-  { username: "user3", password: "user789" },
->>>>>>> f9bf8392d381df78ab081eef6cca137800343ecc
 ];
 
 // Initialize default users
 async function initializeUsers() {
   for (const user of defaultUsers) {
     try {
-<<<<<<< HEAD
       await User.findOneAndUpdate(
         { username: user.username },
         user,
         { upsert: true }
       );
-=======
-      await User.findOneAndUpdate({ username: user.username }, user, {
-        upsert: true,
-      });
->>>>>>> f9bf8392d381df78ab081eef6cca137800343ecc
     } catch (err) {
       console.error(`Error creating user ${user.username}:`, err);
     }
@@ -94,7 +78,6 @@ initializeUsers();
 
 app.use(express.json());
 
-<<<<<<< HEAD
 app.use(cors({
   origin: [
     'https://chat220.netlify.app',
@@ -122,20 +105,10 @@ app.get('/users', async (req, res) => {
     console.error('Error fetching users:', err);
     res.status(500).json({ error: 'Failed to fetch users' });
   }
-=======
-// Add this endpoint before socket.io setup
-app.get("/users", (req, res) => {
-  res.json(
-    defaultUsers.map((user) => ({
-      username: user.username,
-    }))
-  );
->>>>>>> f9bf8392d381df78ab081eef6cca137800343ecc
 });
 
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
-<<<<<<< HEAD
   
   socket.on("auth", async ({ username, password }) => {
     try {
@@ -145,17 +118,6 @@ io.on("connection", (socket) => {
         socket.emit("auth-success", { username });
         io.emit("users-update", Array.from(activeUsers.values()));
 
-=======
-
-  socket.on("auth", async ({ username, password }) => {
-    try {
-      const user = await User.findOne({ username, password });
-      if (user) {
-        activeUsers.set(socket.id, username);
-        socket.emit("auth-success", { username });
-        io.emit("users-update", Array.from(activeUsers.values()));
-
->>>>>>> f9bf8392d381df78ab081eef6cca137800343ecc
         try {
           const messages = await Message.find()
             .sort({ timestamp: -1 })
@@ -168,11 +130,7 @@ io.on("connection", (socket) => {
       } else {
         // Check against default users if MongoDB fails
         const defaultUser = defaultUsers.find(
-<<<<<<< HEAD
           u => u.username === username && u.password === password
-=======
-          (u) => u.username === username && u.password === password
->>>>>>> f9bf8392d381df78ab081eef6cca137800343ecc
         );
         if (defaultUser) {
           activeUsers.set(socket.id, username);
@@ -187,11 +145,7 @@ io.on("connection", (socket) => {
       console.error("Auth error:", err);
       // Fallback to default users
       const defaultUser = defaultUsers.find(
-<<<<<<< HEAD
         u => u.username === username && u.password === password
-=======
-        (u) => u.username === username && u.password === password
->>>>>>> f9bf8392d381df78ab081eef6cca137800343ecc
       );
       if (defaultUser) {
         activeUsers.set(socket.id, username);
