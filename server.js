@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import { Message } from "./models/Message.js";
+import { User } from "./models/User.js";
 
 dotenv.config();
 
@@ -49,39 +50,101 @@ async function checkDatabaseSize() {
 // Check size every hour
 setInterval(checkDatabaseSize, 3600000);
 
+// Add predefined users
+const defaultUsers = [
+  { username: 'admin', password: 'admin123' },
+  { username: 'user1', password: 'user123' },
+  { username: 'user2', password: 'user456' },
+  { username: 'user3', password: 'user789' }
+];
+
+// Initialize default users
+async function initializeUsers() {
+  for (const user of defaultUsers) {
+    try {
+      await User.findOneAndUpdate(
+        { username: user.username },
+        user,
+        { upsert: true }
+      );
+    } catch (err) {
+      console.error(`Error creating user ${user.username}:`, err);
+    }
+  }
+}
+
+// Initialize users on server start
+initializeUsers();
+
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
-  socket.on("auth", ({ username, password }) => {
-    if (password === CHAT_PASSWORD) {
-      activeUsers.set(socket.id, username);
-      socket.emit("auth-success");
-      io.emit("users-update", Array.from(activeUsers.values()));
+  
+  socket.on("auth", async ({ username, password }) => {
+    try {
+      const user = await User.findOne({ username, password });
+      if (user) {
+        activeUsers.set(socket.id, username);
+        socket.emit("auth-success", { username });
+        io.emit("users-update", Array.from(activeUsers.values()));
 
-      // Load last 50 messages
-      Message.find()
-        .sort({ timestamp: -1 })
-        .limit(50)
-        .then((messages) => {
+        try {
+          const messages = await Message.find()
+            .sort({ timestamp: -1 })
+            .limit(100);
           socket.emit("message-history", messages.reverse());
-        });
-    } else {
-      socket.emit("auth-failed");
+        } catch (err) {
+          console.error("MongoDB error:", err);
+          socket.emit("use-local-storage");
+        }
+      } else {
+        // Check against default users if MongoDB fails
+        const defaultUser = defaultUsers.find(
+          u => u.username === username && u.password === password
+        );
+        if (defaultUser) {
+          activeUsers.set(socket.id, username);
+          socket.emit("auth-success", { username });
+          io.emit("users-update", Array.from(activeUsers.values()));
+          socket.emit("use-local-storage");
+        } else {
+          socket.emit("auth-failed");
+        }
+      }
+    } catch (err) {
+      console.error("Auth error:", err);
+      // Fallback to default users
+      const defaultUser = defaultUsers.find(
+        u => u.username === username && u.password === password
+      );
+      if (defaultUser) {
+        activeUsers.set(socket.id, username);
+        socket.emit("auth-success", { username });
+        io.emit("users-update", Array.from(activeUsers.values()));
+        socket.emit("use-local-storage");
+      } else {
+        socket.emit("auth-failed");
+      }
     }
   });
 
   socket.on("send-message", async (message) => {
     const username = activeUsers.get(socket.id);
     if (username) {
-      const newMessage = new Message({
-        username,
-        message,
-        isFile: false,
-        timestamp: new Date(),
-      });
-      await newMessage.save();
+      try {
+        const newMessage = new Message({
+          username,
+          message: message.message,
+          isFile: false,
+          timestamp: new Date(),
+        });
+        await newMessage.save();
+      } catch (err) {
+        console.error("Failed to save message to MongoDB:", err);
+      }
+      // Always emit the message even if MongoDB fails
       io.emit("receive-message", {
         username,
-        message,
+        message: message.message,
         timestamp: new Date().toISOString(),
       });
     }
