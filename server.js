@@ -48,6 +48,7 @@ async function checkDatabaseSize() {
 setInterval(checkDatabaseSize, 3600000);
 
 io.on('connection', (socket) => {
+  console.log('A user connected:', socket.id);
   socket.on('auth', ({ username, password }) => {
     if (password === CHAT_PASSWORD) {
       activeUsers.set(socket.id, username);
