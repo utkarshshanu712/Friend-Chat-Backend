@@ -203,6 +203,98 @@ io.on("connection", (socket) => {
     activeUsers.delete(socket.id);
     io.emit("users-update", Array.from(activeUsers.values()));
   });
+
+  // Password change handler
+  socket.on("change-password", async ({ username, oldPassword, newPassword }) => {
+    try {
+      const user = await User.findOne({ username, password: oldPassword });
+      if (user) {
+        user.password = newPassword;
+        user.hasChangedPassword = true;
+        await user.save();
+        socket.emit("password-change-success");
+      } else {
+        socket.emit("password-change-failed");
+      }
+    } catch (err) {
+      socket.emit("password-change-failed");
+    }
+  });
+
+  // Private message handler
+  socket.on("private-message", async ({ receiver, message }) => {
+    const sender = activeUsers.get(socket.id);
+    if (sender) {
+      const newMessage = new Message({
+        sender,
+        receiver,
+        message,
+        isRead: false,
+        readBy: [sender]
+      });
+      await newMessage.save();
+      
+      // Find receiver's socket
+      const receiverSocket = Array.from(activeUsers.entries())
+        .find(([_, username]) => username === receiver)?.[0];
+      
+      if (receiverSocket) {
+        io.to(receiverSocket).emit("receive-private-message", {
+          sender,
+          message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  });
+
+  // Message read receipt handler
+  socket.on("mark-message-read", async ({ messageId }) => {
+    const reader = activeUsers.get(socket.id);
+    if (reader) {
+      const message = await Message.findById(messageId);
+      if (message && !message.readBy.includes(reader)) {
+        message.readBy.push(reader);
+        message.isRead = true;
+        await message.save();
+        
+        // Notify sender
+        const senderSocket = Array.from(activeUsers.entries())
+          .find(([_, username]) => username === message.sender)?.[0];
+        
+        if (senderSocket) {
+          io.to(senderSocket).emit("message-read", {
+            messageId,
+            reader
+          });
+        }
+      }
+    }
+  });
+
+  // Delete message handler
+  socket.on("delete-message", async ({ messageId }) => {
+    const username = activeUsers.get(socket.id);
+    if (username) {
+      try {
+        const message = await Message.findById(messageId);
+        if (message && (message.sender === username || message.receiver === username)) {
+          message.deletedBy.push(username);
+          if (message.deletedBy.length === 2 || !message.receiver) { // If both users deleted or it's a group message
+            message.isDeleted = true;
+          }
+          await message.save();
+          
+          io.emit("message-deleted", {
+            messageId,
+            deletedBy: username
+          });
+        }
+      } catch (err) {
+        console.error("Error deleting message:", err);
+      }
+    }
+  });
 });
 
 server.listen(PORT, () => {

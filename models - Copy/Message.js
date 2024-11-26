@@ -1,8 +1,7 @@
 import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema({
-  sender: String,
-  receiver: String,
+  username: String,
   message: String,
   isFile: Boolean,
   fileData: {
@@ -10,16 +9,6 @@ const messageSchema = new mongoose.Schema({
     type: String,
     data: String
   },
-  isRead: {
-    type: Boolean,
-    default: false
-  },
-  readBy: [String],
-  isDeleted: {
-    type: Boolean,
-    default: false
-  },
-  deletedBy: [String],
   timestamp: {
     type: Date,
     default: Date.now
