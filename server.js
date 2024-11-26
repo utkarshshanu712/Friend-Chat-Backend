@@ -19,10 +19,6 @@ const io = new Server(server, {
   maxHttpBufferSize: 50e6 // 50MB in bytes
 });
 
-
-
-const PORT = process.env.PORT || 5000;
-
 const activeUsers = new Map();
 
 // MongoDB connection
@@ -124,34 +120,31 @@ app.get('/users', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
+
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
 
-//delete
-socket.on("delete-message", async ({ messageId }) => {
-  const username = activeUsers.get(socket.id);
-  if (username) {
-    try {
-      const message = await Message.findById(messageId);
-      if (message && (message.sender === username || message.receiver === username)) {
-        await Message.findByIdAndDelete(messageId); // Permanently delete the message from the database
+  // Event to delete a message
+  socket.on("delete-message", async ({ messageId }) => {
+    const username = activeUsers.get(socket.id);
+    if (username) {
+      try {
+        const message = await Message.findById(messageId);
+        if (message && (message.sender === username || message.receiver === username)) {
+          await Message.findByIdAndDelete(messageId); // Permanently delete the message from the database
 
-        // Notify all clients that the message has been deleted
-        io.emit("message-deleted", { messageId });
-      } else {
-        socket.emit("delete-failed", { error: "Unauthorized to delete this message" });
+          // Notify all clients that the message has been deleted
+          io.emit("message-deleted", { messageId });
+        } else {
+          socket.emit("delete-failed", { error: "Unauthorized to delete this message" });
+        }
+      } catch (err) {
+        console.error("Error deleting message:", err);
+        socket.emit("delete-failed", { error: "An error occurred during deletion" });
       }
-    } catch (err) {
-      console.error("Error deleting message:", err);
-      socket.emit("delete-failed", { error: "An error occurred during deletion" });
     }
-  }
-});
+  });
 
-
-io.on("connection", (socket) => {
-  console.log("A user connected:", socket.id);
-  
   socket.on("auth", async ({ username, password }) => {
     try {
       const user = await User.findOne({ username });
@@ -288,7 +281,6 @@ io.on("connection", (socket) => {
     }
   });
 
-
   // Profile picture change handler
   socket.on("update-profile-pic", async ({ username, profilePic }) => {
     try {
@@ -305,6 +297,7 @@ io.on("connection", (socket) => {
   });
 });
 
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
