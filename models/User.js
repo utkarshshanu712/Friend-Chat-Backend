@@ -4,7 +4,8 @@ const userSchema = new mongoose.Schema({
   username: {
     type: String,
     unique: true,
-    required: true
+    required: true,
+    trim: true
   },
   password: {
     type: String,
@@ -16,8 +17,16 @@ const userSchema = new mongoose.Schema({
   },
   profilePic: {
     type: String,
-    default: null
+    default: null,
+    validate: {
+      validator: function(v) {
+        return v === null || v.startsWith('data:image/');
+      },
+      message: 'Profile picture must be a valid image data URL'
+    }
+  },
+  lastActive: {
+    type: Date,
+    default: Date.now
   }
 });
-
-export const User = mongoose.model('User', userSchema); 

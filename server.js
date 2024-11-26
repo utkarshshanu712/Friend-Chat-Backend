@@ -73,8 +73,23 @@ async function initializeUsers() {
   }
 }
 
-// Initialize users on server start
+// Add this after the initializeUsers function
+async function cleanupOldUsers() {
+  try {
+    await User.deleteMany({
+      username: { 
+        $nin: defaultUsers.map(user => user.username)
+      }
+    });
+    console.log("Old users cleaned up successfully");
+  } catch (err) {
+    console.error("Error cleaning up old users:", err);
+  }
+}
+
+// Call it after initializeUsers()
 initializeUsers();
+cleanupOldUsers();
 
 app.use(express.json());
 
@@ -112,49 +127,23 @@ io.on("connection", (socket) => {
   
   socket.on("auth", async ({ username, password }) => {
     try {
-      const user = await User.findOne({ username, password });
-      if (user) {
+      const user = await User.findOne({ username });
+      if (user && user.password === password) {
         activeUsers.set(socket.id, username);
         socket.emit("auth-success", { username });
         io.emit("users-update", Array.from(activeUsers.values()));
 
-        try {
-          const messages = await Message.find()
-            .sort({ timestamp: -1 })
-            .limit(100);
-          socket.emit("message-history", messages.reverse());
-        } catch (err) {
-          console.error("MongoDB error:", err);
-          socket.emit("use-local-storage");
-        }
-      } else {
-        // Check against default users if MongoDB fails
-        const defaultUser = defaultUsers.find(
-          u => u.username === username && u.password === password
-        );
-        if (defaultUser) {
-          activeUsers.set(socket.id, username);
-          socket.emit("auth-success", { username });
-          io.emit("users-update", Array.from(activeUsers.values()));
-          socket.emit("use-local-storage");
-        } else {
-          socket.emit("auth-failed");
-        }
-      }
-    } catch (err) {
-      console.error("Auth error:", err);
-      // Fallback to default users
-      const defaultUser = defaultUsers.find(
-        u => u.username === username && u.password === password
-      );
-      if (defaultUser) {
-        activeUsers.set(socket.id, username);
-        socket.emit("auth-success", { username });
-        io.emit("users-update", Array.from(activeUsers.values()));
-        socket.emit("use-local-storage");
+        // Send message history
+        const messages = await Message.find()
+          .sort({ timestamp: -1 })
+          .limit(100);
+        socket.emit("message-history", messages.reverse());
       } else {
         socket.emit("auth-failed");
       }
+    } catch (err) {
+      console.error("Auth error:", err);
+      socket.emit("auth-failed");
     }
   });
 
@@ -293,6 +282,21 @@ io.on("connection", (socket) => {
       } catch (err) {
         console.error("Error deleting message:", err);
       }
+    }
+  });
+
+  // Profile picture change handler
+  socket.on("update-profile-pic", async ({ username, profilePic }) => {
+    try {
+      const user = await User.findOne({ username });
+      if (user) {
+        user.profilePic = profilePic;
+        await user.save();
+        socket.emit("profile-pic-updated", { success: true });
+      }
+    } catch (err) {
+      console.error("Error updating profile picture:", err);
+      socket.emit("profile-pic-updated", { success: false });
     }
   });
 });
