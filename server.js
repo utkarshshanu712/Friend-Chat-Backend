@@ -16,6 +16,7 @@ const io = new Server(server, {
     origin: ["http://localhost:5173", "https://chat220.netlify.app"],
     methods: ["GET", "POST"],
   },
+  maxHttpBufferSize: 50e6 // 50MB in bytes
 });
 
 const PORT = process.env.PORT || 5000;
