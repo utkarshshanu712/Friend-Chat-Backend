@@ -51,8 +51,8 @@ setInterval(checkDatabaseSize, 3600000);
 
 // Add predefined users
 const defaultUsers = [
-  { username: 'Utkarsh', password: '@@@Abc123' },
-  { username: 'vishal', password: 'vishal8544' },
+  { username: 'admin', password: 'admin123' },
+  { username: 'user1', password: 'user123' },
   { username: 'user2', password: 'user456' },
   { username: 'user3', password: 'user789' }
 ];
@@ -231,11 +231,9 @@ io.on("connection", (socket) => {
   });
 
   // Private message handler
-socket.on("private-message", async ({ receiver, message }) => {
-  const sender = activeUsers.get(socket.id);
-  if (sender) {
-    try {
-      // Save the private message to the database
+  socket.on("private-message", async ({ receiver, message }) => {
+    const sender = activeUsers.get(socket.id);
+    if (sender) {
       const newMessage = new Message({
         sender,
         receiver,
@@ -244,38 +242,20 @@ socket.on("private-message", async ({ receiver, message }) => {
         readBy: [sender]
       });
       await newMessage.save();
-
-      console.log(`Message from ${sender} to ${receiver} saved.`);
-
-      // Find the receiver's socket ID
+      
+      // Find receiver's socket
       const receiverSocket = Array.from(activeUsers.entries())
         .find(([_, username]) => username === receiver)?.[0];
-
+      
       if (receiverSocket) {
-        // If the receiver is online, send the message immediately
         io.to(receiverSocket).emit("receive-private-message", {
           sender,
           message,
           timestamp: new Date().toISOString()
         });
-
-        console.log(`Message sent to receiver ${receiver}: ${message}`);
-      } else {
-        // If the receiver is offline, just save the message and inform sender
-        console.log(`Receiver ${receiver} is offline. Message will be delivered later.`);
-        socket.emit("private-message-status", {
-          status: "Message saved and will be delivered when the user is online"
-        });
       }
-    } catch (err) {
-      console.error("Error sending private message:", err);
-      socket.emit("private-message-error", { error: "Error sending message" });
     }
-  } else {
-    socket.emit("private-message-error", { error: "Sender not authenticated" });
-  }
-});
-
+  });
 
   // Message read receipt handler
   socket.on("mark-message-read", async ({ messageId }) => {
