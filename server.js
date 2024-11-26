@@ -19,25 +19,6 @@ const io = new Server(server, {
   maxHttpBufferSize: 50e6 // 50MB in bytes
 });
 
-socket.on("delete-message", async ({ messageId }) => {
-  const username = activeUsers.get(socket.id);
-  if (username) {
-    try {
-      const message = await Message.findById(messageId);
-      if (message && (message.sender === username || message.receiver === username)) {
-        await Message.findByIdAndDelete(messageId); // Permanently delete the message from the database
-
-        // Notify all clients that the message has been deleted
-        io.emit("message-deleted", { messageId });
-      } else {
-        socket.emit("delete-failed", { error: "Unauthorized to delete this message" });
-      }
-    } catch (err) {
-      console.error("Error deleting message:", err);
-      socket.emit("delete-failed", { error: "An error occurred during deletion" });
-    }
-  }
-});
 
 
 const PORT = process.env.PORT || 5000;
@@ -143,6 +124,30 @@ app.get('/users', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
+io.on("connection", (socket) => {
+  console.log("A user connected:", socket.id);
+
+//delete
+socket.on("delete-message", async ({ messageId }) => {
+  const username = activeUsers.get(socket.id);
+  if (username) {
+    try {
+      const message = await Message.findById(messageId);
+      if (message && (message.sender === username || message.receiver === username)) {
+        await Message.findByIdAndDelete(messageId); // Permanently delete the message from the database
+
+        // Notify all clients that the message has been deleted
+        io.emit("message-deleted", { messageId });
+      } else {
+        socket.emit("delete-failed", { error: "Unauthorized to delete this message" });
+      }
+    } catch (err) {
+      console.error("Error deleting message:", err);
+      socket.emit("delete-failed", { error: "An error occurred during deletion" });
+    }
+  }
+});
+
 
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
