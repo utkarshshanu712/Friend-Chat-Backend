@@ -95,7 +95,6 @@ app.use(
     origin: ["https://chat220.netlify.app", "http://localhost:5173"],
     methods: ["GET", "POST"],
     credentials: true,
-    maxAge: 3600
   })
 );
 
@@ -182,44 +181,36 @@ io.on("connection", (socket) => {
   });
 
   // Update the message handler
-  socket.on("send-message", async (message) => {
-    const sender = activeUsers.get(socket.id);
-    if (sender) {
-      try {
-        const chatId = message.receiver
-          ? createChatId(sender, message.receiver)
-          : "broadcast";
+  socket.on("send-message", async (messageData) => {
+    try {
+      // Create new message document
+      const message = new Message({
+        sender: messageData.sender,
+        receiver: messageData.receiver,
+        message: messageData.message,
+        isFile: messageData.isFile || false,
+        fileData: messageData.fileData || {},
+        chatId: messageData.chatId,
+        timestamp: messageData.timestamp
+      });
 
-        const newMessage = new Message({
-          sender,
-          receiver: message.receiver || null,
-          message: message.message,
-          chatId,
-          timestamp: new Date(),
-        });
+      // Save message to database
+      await message.save();
 
-        await newMessage.save();
-        const messageToSend = newMessage.toObject();
-
-        if (message.receiver) {
-          // Find receiver's socket
-          const receiverSocket = Array.from(activeUsers.entries()).find(
-            ([_, username]) => username === message.receiver
-          )?.[0];
-
-          if (receiverSocket) {
-            io.to(receiverSocket).emit("receive-message", messageToSend);
-          }
-          // Send to sender
-          socket.emit("receive-message", messageToSend);
-        } else {
-          // Broadcast message
-          io.emit("receive-message", messageToSend);
+      // Emit to appropriate recipients
+      if (messageData.receiver) {
+        // Private message
+        const receiverSocket = activeUsers.get(messageData.receiver);
+        if (receiverSocket) {
+          io.to(receiverSocket).emit("receive-message", message);
         }
-      } catch (err) {
-        console.error("Failed to save message:", err);
-        socket.emit("message-error", { error: "Failed to send message" });
+        socket.emit("receive-message", message);
+      } else {
+        // Broadcast message
+        io.emit("receive-message", message);
       }
+    } catch (err) {
+      console.error("Error saving message:", err);
     }
   });
 
@@ -227,42 +218,24 @@ io.on("connection", (socket) => {
     const sender = activeUsers.get(socket.id);
     if (sender) {
       try {
-        const chatId = fileData.receiver
-          ? createChatId(sender, fileData.receiver)
-          : 'broadcast';
-
         const newMessage = new Message({
           sender,
-          receiver: fileData.receiver || null,
-          message: fileData.name,
           isFile: true,
-          fileData: {
-            name: fileData.name,
-            type: fileData.type,
-            data: fileData.data
-          },
-          chatId,
-          timestamp: new Date()
+          fileData,
+          timestamp: new Date(),
         });
-
         await newMessage.save();
-        const messageToSend = newMessage.toObject();
 
-        if (fileData.receiver) {
-          const receiverSocket = Array.from(activeUsers.entries()).find(
-            ([_, username]) => username === fileData.receiver
-          )?.[0];
-
-          if (receiverSocket) {
-            io.to(receiverSocket).emit('receive-message', messageToSend);
-          }
-          socket.emit('receive-message', messageToSend);
-        } else {
-          io.emit('receive-message', messageToSend);
-        }
+        io.emit("receive-file", {
+          _id: newMessage._id,
+          sender,
+          fileData,
+          isFile: true,
+          timestamp: new Date().toISOString(),
+        });
       } catch (err) {
-        console.error('Failed to save file message:', err);
-        socket.emit('message-error', { error: 'Failed to send file' });
+        console.error("Error saving file message:", err);
+        socket.emit("file-upload-failed");
       }
     }
   });
