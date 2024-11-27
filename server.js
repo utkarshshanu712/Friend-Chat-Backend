@@ -95,6 +95,7 @@ app.use(
     origin: ["https://chat220.netlify.app", "http://localhost:5173"],
     methods: ["GET", "POST"],
     credentials: true,
+    maxAge: 3600
   })
 );
 
@@ -226,24 +227,42 @@ io.on("connection", (socket) => {
     const sender = activeUsers.get(socket.id);
     if (sender) {
       try {
+        const chatId = fileData.receiver
+          ? createChatId(sender, fileData.receiver)
+          : 'broadcast';
+
         const newMessage = new Message({
           sender,
+          receiver: fileData.receiver || null,
+          message: fileData.name,
           isFile: true,
-          fileData,
-          timestamp: new Date(),
+          fileData: {
+            name: fileData.name,
+            type: fileData.type,
+            data: fileData.data
+          },
+          chatId,
+          timestamp: new Date()
         });
-        await newMessage.save();
 
-        io.emit("receive-file", {
-          _id: newMessage._id,
-          sender,
-          fileData,
-          isFile: true,
-          timestamp: new Date().toISOString(),
-        });
+        await newMessage.save();
+        const messageToSend = newMessage.toObject();
+
+        if (fileData.receiver) {
+          const receiverSocket = Array.from(activeUsers.entries()).find(
+            ([_, username]) => username === fileData.receiver
+          )?.[0];
+
+          if (receiverSocket) {
+            io.to(receiverSocket).emit('receive-message', messageToSend);
+          }
+          socket.emit('receive-message', messageToSend);
+        } else {
+          io.emit('receive-message', messageToSend);
+        }
       } catch (err) {
-        console.error("Error saving file message:", err);
-        socket.emit("file-upload-failed");
+        console.error('Failed to save file message:', err);
+        socket.emit('message-error', { error: 'Failed to send file' });
       }
     }
   });
