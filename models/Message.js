@@ -15,10 +15,8 @@ const messageSchema = new mongoose.Schema({
     default: false
   },
   fileData: {
-    name: String,
-    type: String,
-    data: String,
-    size: Number
+    type: mongoose.Schema.Types.Mixed,  // Changed to Mixed to allow an object
+    default: {}  // Default to an empty object
   },
   chatId: String,
   isRead: {
@@ -31,4 +29,4 @@ const messageSchema = new mongoose.Schema({
   }
 });
 
-export const Message = mongoose.model('Message', messageSchema); 
+export const Message = mongoose.model('Message', messageSchema);
