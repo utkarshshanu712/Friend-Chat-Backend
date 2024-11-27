@@ -3,8 +3,6 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
-import multer from "multer";
-import path from "path";
 import { Message } from "./models/Message.js";
 import { User } from "./models/User.js";
 import cors from "cors";
@@ -29,27 +27,13 @@ mongoose
   .then(() => console.log("Connected to MongoDB"))
   .catch((err) => console.error("MongoDB connection error:", err));
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (req.url.includes("profile-pic")) {
-      cb(null, "uploads/profile-pics/");
-    } else {
-      cb(null, "uploads/attachments/");
-    }
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-const upload = multer({ storage });
-
 // Monitor database size
 async function checkDatabaseSize() {
   const stats = await mongoose.connection.db.stats();
   const sizeInMB = stats.dataSize / (1024 * 1024);
 
   if (sizeInMB > 350) {
+    // Clean up when approaching 400MB
     const oldestMessages = await Message.find()
       .sort({ timestamp: 1 })
       .limit(100);
@@ -77,11 +61,9 @@ const defaultUsers = [
 async function initializeUsers() {
   for (const user of defaultUsers) {
     try {
-      await User.findOneAndUpdate(
-        { username: user.username },
-        user,
-        { upsert: true }
-      );
+      await User.findOneAndUpdate({ username: user.username }, user, {
+        upsert: true,
+      });
     } catch (err) {
       console.error(`Error creating user ${user.username}:`, err);
     }
@@ -92,7 +74,9 @@ async function initializeUsers() {
 async function cleanupOldUsers() {
   try {
     await User.deleteMany({
-      username: { $nin: defaultUsers.map((user) => user.username) },
+      username: {
+        $nin: defaultUsers.map((user) => user.username),
+      },
     });
     console.log("Old users cleaned up successfully");
   } catch (err) {
@@ -117,7 +101,10 @@ app.use(
 // Add headers middleware for additional CORS support
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "https://chat220.netlify.app");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept"
+  );
   res.header("Access-Control-Allow-Methods", "GET, POST");
   res.header("Access-Control-Allow-Credentials", "true");
   next();
@@ -134,60 +121,6 @@ app.get("/users", async (req, res) => {
   }
 });
 
-// Profile Picture Upload
-app.post("/api/user/profile-pic", upload.single("profilePic"), async (req, res) => {
-  const { username } = req.body;
-
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
-  }
-
-  try {
-    const user = await User.findOneAndUpdate(
-      { username },
-      { profilePic: `/uploads/profile-pics/${req.file.filename}` },
-      { new: true }
-    );
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    res.json({ imageUrl: `/uploads/profile-pics/${req.file.filename}` });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to upload profile picture" });
-  }
-});
-
-// File Attachment Upload
-app.post("/api/messages/upload", upload.single("file"), async (req, res) => {
-  const { sender, chatId } = req.body;
-
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
-  }
-
-  try {
-    const newMessage = new Message({
-      sender,
-      chatId,
-      isFile: true,
-      fileData: {
-        name: req.file.originalname,
-        type: req.file.mimetype,
-        data: `/uploads/attachments/${req.file.filename}`,
-        size: req.file.size,
-      },
-      timestamp: new Date(),
-    });
-
-    await newMessage.save();
-    res.json({ success: true, message: newMessage });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to upload file" });
-  }
-});
-
 // Add this function at the top
 function createChatId(user1, user2) {
   return [user1, user2].sort().join("_");
@@ -195,49 +128,6 @@ function createChatId(user1, user2) {
 
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
-
-  // Profile Picture Update via Socket
-  socket.on("update-profile-pic", async ({ username, profilePic }) => {
-    try {
-      const user = await User.findOne({ username });
-      if (user) {
-        user.profilePic = profilePic;
-        await user.save();
-        socket.emit("profile-pic-updated", { success: true });
-      }
-    } catch (err) {
-      console.error("Error updating profile picture:", err);
-      socket.emit("profile-pic-updated", { success: false });
-    }
-  });
-
-  // File Attachment Broadcast via Socket
-  socket.on("send-file", async (fileData) => {
-    const sender = activeUsers.get(socket.id);
-    if (sender) {
-      try {
-        // Check if the file has already been sent (prevent duplicates)
-        const existingMessage = await Message.findOne({ "fileData.data": fileData.data });
-        if (existingMessage) {
-          console.log("Duplicate message detected, skipping save.");
-          return;
-        }
-
-        const newMessage = new Message({
-          sender,
-          isFile: true,
-          fileData,
-          timestamp: new Date(),
-        });
-
-        await newMessage.save();
-        io.emit("receive-file", newMessage);
-      } catch (err) {
-        console.error("Error saving file message:", err);
-        socket.emit("file-upload-failed");
-      }
-    }
-  });
 
   // Event to delete a message
   socket.on("delete-message", async ({ messageId }) => {
@@ -299,13 +189,6 @@ io.on("connection", (socket) => {
           ? createChatId(sender, message.receiver)
           : "broadcast";
 
-        // Check for duplicate message
-        const existingMessage = await Message.findOne({ chatId, message: message.message });
-        if (existingMessage) {
-          console.log("Duplicate message detected, skipping save.");
-          return;
-        }
-
         const newMessage = new Message({
           sender,
           receiver: message.receiver || null,
@@ -335,6 +218,32 @@ io.on("connection", (socket) => {
       } catch (err) {
         console.error("Failed to save message:", err);
         socket.emit("message-error", { error: "Failed to send message" });
+      }
+    }
+  });
+
+  socket.on("send-file", async (fileData) => {
+    const sender = activeUsers.get(socket.id);
+    if (sender) {
+      try {
+        const newMessage = new Message({
+          sender,
+          isFile: true,
+          fileData,
+          timestamp: new Date(),
+        });
+        await newMessage.save();
+
+        io.emit("receive-file", {
+          _id: newMessage._id,
+          sender,
+          fileData,
+          isFile: true,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error("Error saving file message:", err);
+        socket.emit("file-upload-failed");
       }
     }
   });
@@ -434,14 +343,14 @@ io.on("connection", (socket) => {
 });
 
 // Add endpoint to get chat history
-app.get('/api/messages/:chatId', async (req, res) => {
+app.get("/api/messages/:chatId", async (req, res) => {
   try {
     const messages = await Message.find({ chatId: req.params.chatId })
       .sort({ timestamp: 1 })
       .limit(100);
     res.json(messages);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch messages' });
+    res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
 
