@@ -53,7 +53,7 @@ setInterval(checkDatabaseSize, 3600000);
 const defaultUsers = [
   { username: "Utkarsh", password: "@@@Abc123" },
   { username: "Vishal", password: "vishal8544" },
-  { username: "user2", password: "user456" },
+  { username: "Shubham", password: "Shubham456" },
   { username: "user3", password: "user789" },
 ];
 
