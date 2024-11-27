@@ -16,7 +16,7 @@ const io = new Server(server, {
     origin: ["http://localhost:5173", "https://chat220.netlify.app"],
     methods: ["GET", "POST"],
   },
-  maxHttpBufferSize: 50e6 // 50MB in bytes
+  maxHttpBufferSize: 52428800 // 50MB in bytes
 });
 
 const activeUsers = new Map();
@@ -215,20 +215,28 @@ io.on("connection", (socket) => {
   });
 
   socket.on("send-file", async (fileData) => {
-    const username = activeUsers.get(socket.id);
-    if (username) {
-      const newMessage = new Message({
-        username,
-        isFile: true,
-        fileData,
-        timestamp: new Date(),
-      });
-      await newMessage.save();
-      io.emit("receive-file", {
-        ...fileData,
-        username,
-        timestamp: new Date().toISOString(),
-      });
+    const sender = activeUsers.get(socket.id);
+    if (sender) {
+      try {
+        const newMessage = new Message({
+          sender,
+          isFile: true,
+          fileData,
+          timestamp: new Date()
+        });
+        await newMessage.save();
+        
+        io.emit("receive-file", {
+          _id: newMessage._id,
+          sender,
+          fileData,
+          isFile: true,
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('Error saving file message:', err);
+        socket.emit("file-upload-failed");
+      }
     }
   });
 
