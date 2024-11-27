@@ -7,19 +7,20 @@ const messageSchema = new mongoose.Schema({
   },
   receiver: {
     type: String,
-    default: null  // null means broadcast message
+    default: null
   },
   message: String,
-  isFile: Boolean,
+  isFile: {
+    type: Boolean,
+    default: false
+  },
   fileData: {
     name: String,
     type: String,
-    data: String
+    data: String,
+    size: Number
   },
-  chatId: {
-    type: String,  // Combination of both users' names (sorted alphabetically)
-    required: true
-  },
+  chatId: String,
   isRead: {
     type: Boolean,
     default: false
