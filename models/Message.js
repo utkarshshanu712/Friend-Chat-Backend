@@ -1,8 +1,14 @@
 import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema({
-  sender: String,
-  receiver: String,
+  sender: {
+    type: String,
+    required: true
+  },
+  receiver: {
+    type: String,
+    default: null  // null means broadcast message
+  },
   message: String,
   isFile: Boolean,
   fileData: {
@@ -10,16 +16,14 @@ const messageSchema = new mongoose.Schema({
     type: String,
     data: String
   },
+  chatId: {
+    type: String,  // Combination of both users' names (sorted alphabetically)
+    required: true
+  },
   isRead: {
     type: Boolean,
     default: false
   },
-  readBy: [String],
-  isDeleted: {
-    type: Boolean,
-    default: false
-  },
-  deletedBy: [String],
   timestamp: {
     type: Date,
     default: Date.now

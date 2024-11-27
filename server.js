@@ -121,6 +121,11 @@ app.get('/users', async (req, res) => {
   }
 });
 
+// Add this function at the top
+function createChatId(user1, user2) {
+  return [user1, user2].sort().join('_');
+}
+
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
 
@@ -131,9 +136,10 @@ io.on("connection", (socket) => {
       try {
         const message = await Message.findById(messageId);
         if (message && (message.sender === username || message.receiver === username)) {
-          await Message.findByIdAndDelete(messageId); // Permanently delete the message from the database
-
-          // Notify all clients that the message has been deleted
+          // Perform hard delete
+          await Message.findByIdAndDelete(messageId);
+          
+          // Notify all clients to remove the message completely
           io.emit("message-deleted", { messageId });
         } else {
           socket.emit("delete-failed", { error: "Unauthorized to delete this message" });
@@ -167,26 +173,53 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Update the message handler
   socket.on("send-message", async (message) => {
-    const username = activeUsers.get(socket.id);
-    if (username) {
+    const sender = activeUsers.get(socket.id);
+    if (sender) {
       try {
+        const chatId = message.receiver ? 
+          createChatId(sender, message.receiver) : 
+          'broadcast';
+
         const newMessage = new Message({
-          username,
+          sender,
+          receiver: message.receiver || null,
           message: message.message,
+          chatId,
           isFile: false,
-          timestamp: new Date(),
+          timestamp: new Date()
         });
         await newMessage.save();
+
+        if (message.receiver) {
+          // Find receiver's socket
+          const receiverSocket = Array.from(activeUsers.entries())
+            .find(([_, username]) => username === message.receiver)?.[0];
+          
+          // Send to receiver if online
+          if (receiverSocket) {
+            io.to(receiverSocket).emit("receive-message", {
+              ...newMessage.toObject(),
+              _id: newMessage._id
+            });
+          }
+          
+          // Always send back to sender
+          socket.emit("receive-message", {
+            ...newMessage.toObject(),
+            _id: newMessage._id
+          });
+        } else {
+          // Broadcast message
+          io.emit("receive-message", {
+            ...newMessage.toObject(),
+            _id: newMessage._id
+          });
+        }
       } catch (err) {
-        console.error("Failed to save message to MongoDB:", err);
+        console.error("Failed to save message:", err);
       }
-      // Always emit the message even if MongoDB fails
-      io.emit("receive-message", {
-        username,
-        message: message.message,
-        timestamp: new Date().toISOString(),
-      });
     }
   });
 
@@ -295,6 +328,18 @@ io.on("connection", (socket) => {
       socket.emit("profile-pic-updated", { success: false });
     }
   });
+});
+
+// Add endpoint to get chat history
+app.get('/api/messages/:chatId', async (req, res) => {
+  try {
+    const messages = await Message.find({ chatId: req.params.chatId })
+      .sort({ timestamp: 1 })
+      .limit(100);
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
 });
 
 const PORT = process.env.PORT || 5000;
