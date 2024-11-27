@@ -323,13 +323,36 @@ io.on("connection", (socket) => {
     try {
       const user = await User.findOne({ username });
       if (user) {
+        // Validate that it's an image data URL
+        if (!profilePic.startsWith('data:image/')) {
+          socket.emit("profile-pic-updated", { 
+            success: false, 
+            error: "Invalid image format" 
+          });
+          return;
+        }
+
         user.profilePic = profilePic;
         await user.save();
-        socket.emit("profile-pic-updated", { success: true });
+        
+        // Emit success event with the updated profile pic
+        socket.emit("profile-pic-updated", { 
+          success: true, 
+          profilePic: profilePic 
+        });
+        
+        // Broadcast profile pic update to other users
+        socket.broadcast.emit("user-profile-updated", {
+          username,
+          profilePic
+        });
       }
     } catch (err) {
       console.error("Error updating profile picture:", err);
-      socket.emit("profile-pic-updated", { success: false });
+      socket.emit("profile-pic-updated", { 
+        success: false, 
+        error: "Server error" 
+      });
     }
   });
 });
