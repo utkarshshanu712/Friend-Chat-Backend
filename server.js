@@ -113,10 +113,9 @@ app.use((req, res, next) => {
 // Add this route before socket.io setup
 app.get("/users", async (req, res) => {
   try {
-    const users = await User.find({}, "username");
-    res.json(users.map((user) => ({ username: user.username })));
+    const users = await User.find({}, 'username profilePic');
+    res.json(users);
   } catch (err) {
-    console.error("Error fetching users:", err);
     res.status(500).json({ error: "Failed to fetch users" });
   }
 });
