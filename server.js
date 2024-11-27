@@ -187,27 +187,21 @@ io.on("connection", (socket) => {
           receiver: message.receiver || null,
           message: message.message,
           chatId,
-          isFile: false,
           timestamp: new Date()
         });
+        
         await newMessage.save();
-
-        const messageToSend = {
-          ...newMessage.toObject(),
-          _id: newMessage._id
-        };
+        const messageToSend = newMessage.toObject();
 
         if (message.receiver) {
           // Find receiver's socket
           const receiverSocket = Array.from(activeUsers.entries())
             .find(([_, username]) => username === message.receiver)?.[0];
           
-          // Send to receiver if online
           if (receiverSocket) {
             io.to(receiverSocket).emit("receive-message", messageToSend);
           }
-          
-          // Always send back to sender with the same message object
+          // Send to sender
           socket.emit("receive-message", messageToSend);
         } else {
           // Broadcast message
