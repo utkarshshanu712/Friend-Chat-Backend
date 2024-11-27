@@ -159,11 +159,11 @@ io.on("connection", (socket) => {
         socket.emit("auth-success", { username });
         io.emit("users-update", Array.from(activeUsers.values()));
 
-        // Send message history
-        const messages = await Message.find()
+        // Send broadcast message history
+        const broadcastMessages = await Message.find({ chatId: 'broadcast' })
           .sort({ timestamp: -1 })
           .limit(100);
-        socket.emit("message-history", messages.reverse());
+        socket.emit("message-history", broadcastMessages.reverse());
       } else {
         socket.emit("auth-failed");
       }
@@ -192,6 +192,11 @@ io.on("connection", (socket) => {
         });
         await newMessage.save();
 
+        const messageToSend = {
+          ...newMessage.toObject(),
+          _id: newMessage._id
+        };
+
         if (message.receiver) {
           // Find receiver's socket
           const receiverSocket = Array.from(activeUsers.entries())
@@ -199,26 +204,18 @@ io.on("connection", (socket) => {
           
           // Send to receiver if online
           if (receiverSocket) {
-            io.to(receiverSocket).emit("receive-message", {
-              ...newMessage.toObject(),
-              _id: newMessage._id
-            });
+            io.to(receiverSocket).emit("receive-message", messageToSend);
           }
           
-          // Always send back to sender
-          socket.emit("receive-message", {
-            ...newMessage.toObject(),
-            _id: newMessage._id
-          });
+          // Always send back to sender with the same message object
+          socket.emit("receive-message", messageToSend);
         } else {
           // Broadcast message
-          io.emit("receive-message", {
-            ...newMessage.toObject(),
-            _id: newMessage._id
-          });
+          io.emit("receive-message", messageToSend);
         }
       } catch (err) {
         console.error("Failed to save message:", err);
+        socket.emit("message-error", { error: "Failed to send message" });
       }
     }
   });
