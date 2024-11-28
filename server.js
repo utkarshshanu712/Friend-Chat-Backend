@@ -267,26 +267,28 @@ io.on("connection", (socket) => {
   // Private message handler
   socket.on("private-message", async (data) => {
     try {
+      const chatId = [data.sender, data.receiver].sort().join('_');
       const message = new Message({
         sender: data.sender,
         receiver: data.receiver,
         message: data.message,
-        chatId: data.chatId,
+        chatId: chatId,
         isFile: data.isFile,
         fileData: data.fileData
       });
       
       await message.save();
 
-      // Emit to both sender and receiver
+      // Find receiver's socket
       const receiverSocket = Array.from(activeUsers.entries())
         .find(([_, username]) => username === data.receiver)?.[0];
-      
+
+      // Emit to receiver if online
       if (receiverSocket) {
         io.to(receiverSocket).emit("private-message", message);
       }
       
-      // Also emit back to sender to ensure consistency
+      // Always emit back to sender
       socket.emit("private-message", message);
       
     } catch (err) {
