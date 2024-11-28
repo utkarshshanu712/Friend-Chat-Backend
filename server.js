@@ -354,6 +354,23 @@ io.on("connection", (socket) => {
       });
     }
   });
+
+  socket.on("mark-messages-read", async ({ chatId, reader }) => {
+    try {
+      await Message.updateMany(
+        { 
+          chatId,
+          readBy: { $ne: reader }
+        },
+        { 
+          $addToSet: { readBy: reader },
+          isRead: true
+        }
+      );
+    } catch (err) {
+      console.error("Error marking messages as read:", err);
+    }
+  });
 });
 
 // Add endpoint to get chat history
