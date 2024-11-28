@@ -15,14 +15,18 @@ const messageSchema = new mongoose.Schema({
     default: false
   },
   fileData: {
-    type: mongoose.Schema.Types.Mixed,  // Changed to Mixed to allow an object
-    default: {}  // Default to an empty object
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   },
   chatId: String,
   isRead: {
     type: Boolean,
     default: false
   },
+  readBy: [{
+    type: String,
+    default: []
+  }],
   timestamp: {
     type: Date,
     default: Date.now

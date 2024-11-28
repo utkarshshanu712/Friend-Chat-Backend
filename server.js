@@ -268,27 +268,33 @@ io.on("connection", (socket) => {
   socket.on("private-message", async ({ receiver, message }) => {
     const sender = activeUsers.get(socket.id);
     if (sender) {
+      const chatId = createChatId(sender, receiver);
       const newMessage = new Message({
         sender,
         receiver,
         message,
+        chatId,
         isRead: false,
-        readBy: [sender],
+        readBy: [sender]  // Sender has already "read" their own message
       });
       await newMessage.save();
 
-      // Find receiver's socket
       const receiverSocket = Array.from(activeUsers.entries()).find(
         ([_, username]) => username === receiver
       )?.[0];
 
       if (receiverSocket) {
-        io.to(receiverSocket).emit("receive-private-message", {
-          sender,
-          message,
-          timestamp: new Date().toISOString(),
+        io.to(receiverSocket).emit("receive-message", {
+          ...newMessage.toObject(),
+          isRead: false
         });
       }
+
+      // Send back to sender with confirmation
+      socket.emit("message-sent", {
+        ...newMessage.toObject(),
+        isRead: false
+      });
     }
   });
 
@@ -299,7 +305,7 @@ io.on("connection", (socket) => {
       const message = await Message.findById(messageId);
       if (message && !message.readBy.includes(reader)) {
         message.readBy.push(reader);
-        message.isRead = true;
+        message.isRead = message.readBy.includes(message.receiver);
         await message.save();
 
         // Notify sender
@@ -311,6 +317,7 @@ io.on("connection", (socket) => {
           io.to(senderSocket).emit("message-read", {
             messageId,
             reader,
+            isRead: message.isRead
           });
         }
       }
