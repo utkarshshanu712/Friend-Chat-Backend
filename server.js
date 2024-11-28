@@ -170,6 +170,28 @@ io.on("connection", (socket) => {
           .sort({ timestamp: -1 })
           .limit(100);
         socket.emit("message-history", broadcastMessages.reverse());
+
+        // After successful authentication
+        try {
+          await User.findOneAndUpdate(
+            { username },
+            { 
+              isOnline: true,
+              lastActive: new Date()
+            }
+          );
+          
+          // Broadcast online status
+          io.emit("user-status-update", {
+            username,
+            status: {
+              isOnline: true,
+              lastActive: new Date()
+            }
+          });
+        } catch (err) {
+          console.error("Error updating user online status:", err);
+        }
       } else {
         socket.emit("auth-failed");
       }
@@ -239,9 +261,32 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("disconnect", () => {
-    activeUsers.delete(socket.id);
-    io.emit("users-update", Array.from(activeUsers.values()));
+  socket.on("disconnect", async () => {
+    const username = activeUsers.get(socket.id);
+    if (username) {
+      try {
+        const lastActive = new Date();
+        await User.findOneAndUpdate(
+          { username },
+          { 
+            lastActive,
+            isOnline: false
+          }
+        );
+        
+        // Broadcast status update to all connected users
+        io.emit("user-status-update", {
+          username,
+          status: {
+            isOnline: false,
+            lastActive
+          }
+        });
+      } catch (err) {
+        console.error("Error updating user status:", err);
+      }
+      activeUsers.delete(socket.id);
+    }
   });
 
   // Password change handler
@@ -354,6 +399,32 @@ io.on("connection", (socket) => {
       });
     }
   });
+
+  // Add these socket events
+  socket.on("message-seen", async ({ messageId }) => {
+    try {
+      const message = await Message.findById(messageId);
+      if (message && !message.isRead) {
+        message.isRead = true;
+        message.readAt = new Date();
+        await message.save();
+
+        // Notify sender about read receipt
+        const senderSocket = Array.from(activeUsers.entries()).find(
+          ([_, username]) => username === message.sender
+        )?.[0];
+
+        if (senderSocket) {
+          io.to(senderSocket).emit("message-read", {
+            messageId,
+            readAt: message.readAt
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error marking message as read:", err);
+    }
+  });
 });
 
 // Add endpoint to get chat history
@@ -365,6 +436,22 @@ app.get("/api/messages/:chatId", async (req, res) => {
     res.json(messages);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+app.get("/user/:username/status", async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username });
+    if (user) {
+      res.json({
+        lastActive: user.lastActive,
+        isOnline: user.isOnline
+      });
+    } else {
+      res.status(404).json({ error: "User not found" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
   }
 });
 
