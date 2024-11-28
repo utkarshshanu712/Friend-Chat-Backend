@@ -265,32 +265,30 @@ io.on("connection", (socket) => {
   );
 
   // Private message handler
-  socket.on("private-message", async (data) => {
-    try {
-      const message = new Message({
-        sender: data.sender,
-        receiver: data.receiver,
-        message: data.message,
-        chatId: data.chatId,
-        isFile: data.isFile,
-        fileData: data.fileData
+  socket.on("private-message", async ({ receiver, message }) => {
+    const sender = activeUsers.get(socket.id);
+    if (sender) {
+      const newMessage = new Message({
+        sender,
+        receiver,
+        message,
+        isRead: false,
+        readBy: [sender],
       });
-      
-      await message.save();
+      await newMessage.save();
 
-      // Emit to both sender and receiver
-      const receiverSocket = Array.from(activeUsers.entries())
-        .find(([_, username]) => username === data.receiver)?.[0];
-      
+      // Find receiver's socket
+      const receiverSocket = Array.from(activeUsers.entries()).find(
+        ([_, username]) => username === receiver
+      )?.[0];
+
       if (receiverSocket) {
-        io.to(receiverSocket).emit("private-message", message);
+        io.to(receiverSocket).emit("receive-private-message", {
+          sender,
+          message,
+          timestamp: new Date().toISOString(),
+        });
       }
-      
-      // Also emit back to sender to ensure consistency
-      socket.emit("private-message", message);
-      
-    } catch (err) {
-      console.error("Error saving private message:", err);
     }
   });
 
@@ -301,7 +299,7 @@ io.on("connection", (socket) => {
       const message = await Message.findById(messageId);
       if (message && !message.readBy.includes(reader)) {
         message.readBy.push(reader);
-        message.isRead = message.readBy.includes(message.receiver);
+        message.isRead = true;
         await message.save();
 
         // Notify sender
@@ -313,7 +311,6 @@ io.on("connection", (socket) => {
           io.to(senderSocket).emit("message-read", {
             messageId,
             reader,
-            isRead: message.isRead
           });
         }
       }
