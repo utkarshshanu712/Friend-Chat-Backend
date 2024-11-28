@@ -265,36 +265,32 @@ io.on("connection", (socket) => {
   );
 
   // Private message handler
-  socket.on("private-message", async ({ receiver, message }) => {
-    const sender = activeUsers.get(socket.id);
-    if (sender) {
-      const chatId = createChatId(sender, receiver);
-      const newMessage = new Message({
-        sender,
-        receiver,
-        message,
-        chatId,
-        isRead: false,
-        readBy: [sender]  // Sender has already "read" their own message
+  socket.on("private-message", async (data) => {
+    try {
+      const message = new Message({
+        sender: data.sender,
+        receiver: data.receiver,
+        message: data.message,
+        chatId: data.chatId,
+        isFile: data.isFile,
+        fileData: data.fileData
       });
-      await newMessage.save();
+      
+      await message.save();
 
-      const receiverSocket = Array.from(activeUsers.entries()).find(
-        ([_, username]) => username === receiver
-      )?.[0];
-
+      // Emit to both sender and receiver
+      const receiverSocket = Array.from(activeUsers.entries())
+        .find(([_, username]) => username === data.receiver)?.[0];
+      
       if (receiverSocket) {
-        io.to(receiverSocket).emit("receive-message", {
-          ...newMessage.toObject(),
-          isRead: false
-        });
+        io.to(receiverSocket).emit("private-message", message);
       }
-
-      // Send back to sender with confirmation
-      socket.emit("message-sent", {
-        ...newMessage.toObject(),
-        isRead: false
-      });
+      
+      // Also emit back to sender to ensure consistency
+      socket.emit("private-message", message);
+      
+    } catch (err) {
+      console.error("Error saving private message:", err);
     }
   });
 
