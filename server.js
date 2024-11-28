@@ -425,6 +425,33 @@ io.on("connection", (socket) => {
       console.error("Error marking message as read:", err);
     }
   });
+
+  socket.on("send-private-message", async (data) => {
+    try {
+      const newMessage = new Message(data);
+      await newMessage.save();
+      
+      const receiverSocket = Array.from(activeUsers.entries()).find(
+        ([_, username]) => username === data.receiver
+      )?.[0];
+
+      if (receiverSocket) {
+        io.to(receiverSocket).emit("receive-private-message", {
+          ...data,
+          _id: newMessage._id
+        });
+      }
+
+      // Send confirmation back to sender with message ID
+      socket.emit("message-sent", {
+        ...data,
+        _id: newMessage._id
+      });
+    } catch (err) {
+      console.error("Error saving message:", err);
+      socket.emit("message-error", { error: "Failed to send message" });
+    }
+  });
 });
 
 // Add endpoint to get chat history
