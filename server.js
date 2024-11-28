@@ -354,6 +354,47 @@ io.on("connection", (socket) => {
       });
     }
   });
+
+  // Add these socket events inside the connection handler
+  socket.on('call-user', ({ target, callType }) => {
+    const caller = activeUsers.get(socket.id);
+    const roomName = `${caller}_${target}_${Date.now()}`;
+    
+    // Find target's socket
+    const targetSocket = Array.from(activeUsers.entries()).find(
+      ([_, username]) => username === target
+    )?.[0];
+
+    if (targetSocket) {
+      io.to(targetSocket).emit('incoming-call', {
+        from: caller,
+        roomName,
+        callType
+      });
+    }
+  });
+
+  socket.on('call-accepted', ({ roomName, target }) => {
+    const caller = activeUsers.get(socket.id);
+    const targetSocket = Array.from(activeUsers.entries()).find(
+      ([_, username]) => username === target
+    )?.[0];
+
+    if (targetSocket) {
+      io.to(targetSocket).emit('call-joined', { roomName });
+    }
+  });
+
+  socket.on('call-rejected', ({ target }) => {
+    const caller = activeUsers.get(socket.id);
+    const targetSocket = Array.from(activeUsers.entries()).find(
+      ([_, username]) => username === target
+    )?.[0];
+
+    if (targetSocket) {
+      io.to(targetSocket).emit('call-ended', { from: caller });
+    }
+  });
 });
 
 // Add endpoint to get chat history
