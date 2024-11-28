@@ -156,7 +156,7 @@ io.on("connection", (socket) => {
       }
     }
   });
-
+// 
   socket.on("auth", async ({ username, password }) => {
     try {
       const user = await User.findOne({ username });
