@@ -428,9 +428,17 @@ io.on("connection", (socket) => {
 
   socket.on("send-private-message", async (data) => {
     try {
-      const newMessage = new Message(data);
+      const newMessage = new Message({
+        sender: data.sender,
+        receiver: data.receiver,
+        message: data.message,
+        chatId: data.chatId,
+        isRead: false,
+        timestamp: new Date()
+      });
       await newMessage.save();
       
+      // Send to receiver
       const receiverSocket = Array.from(activeUsers.entries()).find(
         ([_, username]) => username === data.receiver
       )?.[0];
@@ -438,14 +446,18 @@ io.on("connection", (socket) => {
       if (receiverSocket) {
         io.to(receiverSocket).emit("receive-private-message", {
           ...data,
-          _id: newMessage._id
+          _id: newMessage._id,
+          isRead: false,
+          timestamp: newMessage.timestamp
         });
       }
 
-      // Send confirmation back to sender with message ID
+      // Send confirmation back to sender
       socket.emit("message-sent", {
         ...data,
-        _id: newMessage._id
+        _id: newMessage._id,
+        isRead: false,
+        timestamp: newMessage.timestamp
       });
     } catch (err) {
       console.error("Error saving message:", err);
