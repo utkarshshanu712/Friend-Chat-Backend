@@ -13,10 +13,10 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "https://chat220.netlify.app"],
+    origin: ["http://localhost:5173", "https://chat220.netlify.app"],//Put your frontend site where you are deploying
     methods: ["GET", "POST"],
   },
-  maxHttpBufferSize: 52428800, // 50MB in bytes
+  maxHttpBufferSize: 52428800, // 50MB in bytes you can increse it according to your database capacity
 });
 
 const activeUsers = new Map();
@@ -25,7 +25,7 @@ const activeUsers = new Map();
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log("Connected to MongoDB"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+  .catch((err) => console.error("MongoDB connection error:", err));// create env file for your  mongo db
 
 // Monitor database size
 async function checkDatabaseSize() {
@@ -51,10 +51,10 @@ setInterval(checkDatabaseSize, 3600000);
 
 // Add predefined users
 const defaultUsers = [
-  { username: "Utkarsh", password: "@@@Abc123" },
-  { username: "Vishal", password: "vishal8544" },
-  { username: "Shubham", password: "Shubham456" },
-  { username: "user3", password: "user789" },
+  { username: "user3", password: "Pass" },
+  { username: "user3", password: "Pass" },
+  { username: "user3", password: "pass" },
+  { username: "user3", password: "Pass" },// you can add more user and custimize it according to your need
 ];
 
 // Initialize default users
